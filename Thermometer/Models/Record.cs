@@ -7,9 +7,9 @@ namespace Thermometer.Models
     public class Record
     {
         public int Id { get; set; }
-        public double SensorHumidity { get; set; }
-        public double SensorTemp { get; set; }
-        public double OutsideTemp { get; set; }
+        public double? SensorHumidity { get; set; }
+        public double? SensorTemp { get; set; }
+        public double? OutsideTemp { get; set; }
         public DateTime Timestamp { get; set; }
     }
 }

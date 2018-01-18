@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System;
+using System.Net.Http;
 using System.Threading.Tasks;
 using Thermometer.Models;
 using Thermometer.Models.AppSettings;
@@ -24,21 +25,41 @@ namespace Thermometer.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Record(double tempC, double humidity)
+        public async Task<IActionResult> Record(double? tempC, double? humidity, bool test = false)
         {
-            Console.WriteLine(DateTime.Now + " Temp: " + tempC + " C, Humidity: " + humidity + "%");
+            //Don't bother if we have no temp data
+            if (tempC.HasValue || humidity.HasValue)
+            {
+                double? outsideTemp = null;
 
-            var client = new DarkSkyService(_darkSky.ApiKey);
-            //My location
-            var forecast = await client.GetWeatherDataAsync(43.704045, -79.400547, Unit.CA);
-            var outsideTemp = forecast.Currently.Temperature;
+                try
+                {
+                    var client = new DarkSkyService(_darkSky.ApiKey);
+                    var forecast = await client.GetWeatherDataAsync(_darkSky.Latitude, _darkSky.Longitude, Unit.CA);
+                    outsideTemp = forecast.Currently.Temperature;
+                }
+                catch (HttpRequestException)
+                {
+                    //Unable to call the DarkSkyApi, just leave outsideTemp as null.
+                }
 
-            //Docker is running in a linux container on UTC time, so we need to get it in EST.
-            var tzi = TZConvert.GetTimeZoneInfo("America/New_York");
-            var estDateTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.Now, tzi.Id);
+                //Docker is running in a linux container on UTC time, so we need to get it in EST.
+                var tzi = TZConvert.GetTimeZoneInfo("America/New_York");
+                var estDateTime = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.Now, tzi.Id);
 
-            var record = new Record() { SensorHumidity = humidity, SensorTemp = tempC, OutsideTemp = outsideTemp, Timestamp = estDateTime };
-            _thermometerRepo.Insert(record);
+                Console.WriteLine(estDateTime + " - Temp: " + tempC + " C, Humidity: " + humidity + "%, Outside: " + outsideTemp + " C");
+
+                //If we're testing, don't save to the db.
+                if (!test)
+                {
+                    var record = new Record() { SensorHumidity = humidity, SensorTemp = tempC, Timestamp = estDateTime };
+                    if (outsideTemp.HasValue)
+                    {
+                        record.OutsideTemp = outsideTemp.Value;
+                    }
+                    _thermometerRepo.Insert(record);
+                }
+            }
 
             return Ok();
         }
